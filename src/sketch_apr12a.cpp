@@ -9,6 +9,7 @@
 #include <MqttClient.h>
 #include "topics/UnlockTopic.h"
 #include "topics/LockTopic.h"
+#include "../lib/Arduino_MKRGPS-1.0.0/src/GPS.h"
 
 using namespace std;
 using namespace Car;
@@ -17,24 +18,36 @@ char ssid[] = NETWORK_SSID;     // your network SSID (name)
 char pass[] = NETWORK_PASSWORD; // your network password (use for WPA, or use as key for WEP)
 int status = WL_IDLE_STATUS;    // the Wifi radio's status
 
+int frontCarPIRPin = 6;
+int leftDoorPIRPin = 1;
+int pirStat = 0;                   // PIR status
+
+
 unsigned long turnOnLightTime = 0;
 unsigned long turnOffLightTime = 0;
 unsigned long blinkInterval = 1000;
 
 unsigned long connectionAttemptTime = 0;
 unsigned long connectionAttemptInterval = 10000;
+bool isUserInside = false;
+
+
 void connectToWifi();
 CarController carController;
 MqttClient mqttClient;
 
-
-double fRand(double fMin, double fMax);
 void IndicateConnectingToWIFI();
 void onMessageReceived(char* topic, byte* payload, unsigned int length);
+void configureFrontCarPIR();
+void configureLeftDoorPIR();
+void readFrontCarPIR();
+void readLeftDoorPIR();
 
 void setup()
 {
     pinMode(LED_BUILTIN, OUTPUT);
+    configureFrontCarPIR();
+    configureLeftDoorPIR();
     // Initialize serial and wait for port to open:
 
 
@@ -43,6 +56,11 @@ void setup()
     {
        connectToWifi();
        IndicateConnectingToWIFI();
+    }
+     //initialize gps
+    if (!GPS.begin()) {
+        Serial.println("Failed to initialize GPS!");
+        while (1);
     }
 
     mqttClient.initialize();
@@ -66,18 +84,49 @@ void connectToWifi(){
 void loop()
 {
     mqttClient.loop();
-    Location randomLocation = {
-            .latitude = 53.4677543,
-            .longitude = -2.2784265};
+    if (GPS.available()) {
+        // read GPS values
+        float latitude   = GPS.latitude();
+        float longitude  = GPS.longitude();
+        Location location = {
+                .latitude = latitude,
+                .longitude = longitude};
 
-    mqttClient.updateLocation(randomLocation);
-
+       mqttClient.updateLocation(location);
+    }
+    readFrontCarPIR();
+    readLeftDoorPIR();
+    mqttClient.updateIsUserInside(isUserInside)
 
     if (status == WL_CONNECTED)
     {
         digitalWrite(LED_BUILTIN, HIGH);
     }
-     delay(300);
+}
+
+void configureLeftDoorPIR(){
+    pinMode(leftDoorPIRPin, INPUT);
+}
+void readLeftDoorPIR(){
+    pirStat = digitalRead(leftDoorPIRPin);
+    if(pirStat == HIGH){
+        isUserInside = true;
+        string  toPrint ="Left door sensor detected movement" + to_string(millis());
+        Serial.println(toPrint.c_str());
+    }
+}
+
+ void configureFrontCarPIR(){
+     pinMode(frontCarPIRPin, INPUT);
+ }
+
+void readFrontCarPIR(){
+    pirStat = digitalRead(frontCarPIRPin);
+    if(pirStat == HIGH){
+        isUserInside = true;
+        string  toPrint ="Front PRI sensor detected movement" + to_string(millis());
+        Serial.println(toPrint.c_str());
+    }
 }
 
 void IndicateConnectingToWIFI()
@@ -98,6 +147,8 @@ void IndicateConnectingToWIFI()
     }
 }
 
+
+
 void onMessageReceived(char* topic, byte* payload, unsigned int length) {
     // handle message arrived
     if(strcmp(topic,LockTopic::getRoute().c_str()) == 0){
@@ -108,10 +159,4 @@ void onMessageReceived(char* topic, byte* payload, unsigned int length) {
         Serial.println("Unlocking car...");
         carController.unlockCar();
     }
-}
-
-double fRand(double fMin, double fMax)
-{
-    double f = (double)rand() / RAND_MAX;
-    return fMin + f * (fMax - fMin);
 }

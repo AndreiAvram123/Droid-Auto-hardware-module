@@ -21,6 +21,9 @@ public :
 public:
     void updateLocation(Location newLocation);
 
+public:
+    void updateIsUserInside(bool isUserInside);
+
 
 public :
       void setCallback(MQTT_CALLBACK_SIGNATURE);

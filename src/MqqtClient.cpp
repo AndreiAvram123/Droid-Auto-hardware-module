@@ -83,3 +83,8 @@ void MqttClient::setCallback(void (*callback)(char *, uint8_t *, unsigned int)) 
     pubSubClient.setCallback(callback);
 }
 
+void MqttClient::updateIsUserInside(bool isUserInside) {
+    //todo
+    //update
+}
+
